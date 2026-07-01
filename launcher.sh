@@ -96,7 +96,138 @@ read_env_value() {
 
 service_name() {
   local id="$1"
-  echo "qolauncher-$(echo "$id" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9-' '-')"
+  local slug
+  slug="$(echo "$id" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9-' '-' | sed -e 's/-\+$//' -e 's/^-\+//')"
+  [[ -n "$slug" ]] || slug="app"
+  echo "qolauncher-${slug}"
+}
+
+# Resolve service key in docker-compose.yml (handles legacy names with trailing dash)
+compose_service_for_app() {
+  local app_id="$1"
+  local expected legacy svc
+  expected="$(service_name "$app_id")"
+  legacy="${expected}-"
+
+  [[ -f "$COMPOSE_FILE" ]] || { echo "$expected"; return; }
+
+  while IFS= read -r svc; do
+    [[ -z "$svc" ]] && continue
+    if [[ "$svc" == "$expected" || "$svc" == "$legacy" ]]; then
+      echo "$svc"
+      return
+    fi
+  done < <(docker_compose config --services 2>/dev/null || true)
+
+  svc="$(grep -B30 "logs/${app_id}" "$COMPOSE_FILE" 2>/dev/null | grep -E '^  qolauncher-' | tail -1 | sed -E 's/^  ([^:]+):.*/\1/')"
+  if [[ -n "$svc" ]]; then
+    echo "$svc"
+    return
+  fi
+  echo "$expected"
+}
+
+# ─── Container status (single source of truth) ─────────────────────────────────
+# Active = running | restarting | paused (sama di semua menu)
+
+container_state() {
+  local svc="$1"
+  local cid state
+  cid="$(docker_compose ps -aq "$svc" 2>/dev/null | head -1 || true)"
+  [[ -n "$cid" ]] || return 1
+  state="$(docker inspect -f '{{.State.Status}}' "$cid" 2>/dev/null || true)"
+  echo "$state"
+}
+
+container_is_active() {
+  local svc="$1"
+  local state
+  state="$(container_state "$svc" 2>/dev/null || true)"
+  [[ "$state" == "running" || "$state" == "restarting" || "$state" == "paused" ]]
+}
+
+container_status_for_app() {
+  local idx="$1"
+  if [[ ! -f "$COMPOSE_FILE" ]]; then
+    echo "not deployed"
+    return
+  fi
+  local svc state cid found=0 s
+  svc="$(compose_service_for_app "${APP_IDS[$idx]}")"
+  while IFS= read -r s; do
+    [[ "$s" == "$svc" ]] && { found=1; break; }
+  done < <(docker_compose config --services 2>/dev/null || true)
+  if [[ $found -eq 0 ]]; then
+    echo "not deployed"
+    return
+  fi
+  cid="$(docker_compose ps -aq "$svc" 2>/dev/null | head -1 || true)"
+  if [[ -z "$cid" ]]; then
+    echo "stopped"
+    return
+  fi
+  state="$(docker inspect -f '{{.State.Status}}' "$cid" 2>/dev/null || true)"
+  echo "${state:-stopped}"
+}
+
+format_state_label() {
+  local state="$1"
+  case "$state" in
+    running)    echo -e "${GREEN}running${NC}" ;;
+    restarting) echo -e "${YELLOW}restarting${NC}" ;;
+    paused)     echo -e "${YELLOW}paused${NC}" ;;
+    exited)     echo -e "${RED}exited${NC}" ;;
+    dead)       echo -e "${RED}dead${NC}" ;;
+    stopped|created) echo -e "${YELLOW}${state}${NC}" ;;
+    "not deployed") echo -e "${YELLOW}not deployed${NC}" ;;
+    *)          echo "$state" ;;
+  esac
+}
+
+normalize_relpath() {
+  local p="$1"
+  while [[ "$p" == *//* ]]; do
+    p="${p//\/\//\/}"
+  done
+  echo "$p"
+}
+
+app_is_active() {
+  local idx="$1"
+  [[ -f "$COMPOSE_FILE" ]] || return 1
+  local svc
+  svc="$(compose_service_for_app "${APP_IDS[$idx]}")"
+  container_is_active "$svc"
+}
+
+detect_active_apps() {
+  detect_apps
+  ACTIVE_INDICES=()
+  local i
+  for i in "${!APP_IDS[@]}"; do
+    if app_is_active "$i"; then
+      ACTIVE_INDICES+=("$i")
+    fi
+  done
+}
+
+active_app_names() {
+  detect_active_apps
+  local names="" idx
+  for idx in "${ACTIVE_INDICES[@]}"; do
+    names+="${APP_IDS[$idx]},"
+  done
+  echo "${names%,}"
+}
+
+active_app_summary() {
+  detect_active_apps
+  local parts="" idx state
+  for idx in "${ACTIVE_INDICES[@]}"; do
+    state="$(container_status_for_app "$idx")"
+    parts+="${APP_IDS[$idx]} (${state}),"
+  done
+  echo "${parts%,}"
 }
 
 skip_app_file() {
@@ -134,7 +265,7 @@ declare -a APP_BINARIES=()
 declare -a APP_ENV_FILES=()
 declare -a DEPLOY_INDICES=()   # semua app di compose
 declare -a SELECTED_INDICES=() # app yang dipilih user untuk aksi ini
-declare -a RUNNING_INDICES=()  # app yang container-nya sedang jalan
+declare -a ACTIVE_INDICES=()  # app dengan container aktif (running/restarting/paused)
 
 detect_apps() {
   APP_IDS=()
@@ -153,8 +284,9 @@ detect_apps() {
     [[ "$app_id" == "*" ]] && continue
 
     local binary="" env_file=""
+    dir="${dir%/}"
     [[ -f "$dir/.env" ]] && env_file="$dir/.env"
-    for f in "$dir"*; do
+    for f in "$dir"/*; do
       [[ -e "$f" ]] || continue
       local base
       base="$(basename "$f")"
@@ -167,7 +299,7 @@ detect_apps() {
 
     [[ -z "$binary" ]] && continue
     APP_IDS+=("$app_id")
-    APP_DIRS+=("${dir%/}")
+    APP_DIRS+=("$dir")
     APP_BINARIES+=("$binary")
     APP_ENV_FILES+=("${env_file:-}")
   done
@@ -259,7 +391,11 @@ show_detected_apps() {
     [[ -n "${APP_ENV_FILES[$i]}" ]] && env_status=".env: ${APP_ENV_FILES[$i]}"
     local port_info="app :${app_port}  viewer :${log_port}"
     [[ "$app_port" == "0" ]] && port_info="(no HTTP)  viewer :${log_port}"
+    local cstatus cstatus_label
+    cstatus="$(container_status_for_app "$i")"
+    cstatus_label="$(format_state_label "$cstatus")"
     echo "  [$((i + 1))] ${APP_IDS[$i]}"
+    echo -e "       status : ${cstatus_label}"
     echo "       binary : ${APP_DIRS[$i]}/${APP_BINARIES[$i]}"
     echo "       env    : ${env_status}"
     echo "       port   : ${port_info}"
@@ -285,7 +421,7 @@ indices_to_services() {
   _out=()
   local idx
   for idx in "${SELECTED_INDICES[@]}"; do
-    _out+=("$(service_name "${APP_IDS[$idx]}")")
+    _out+=("$(compose_service_for_app "${APP_IDS[$idx]}")")
   done
 }
 
@@ -297,68 +433,48 @@ selected_app_names() {
   echo "${names%,}"
 }
 
-app_is_running() {
-  local idx="$1"
-  [[ -f "$COMPOSE_FILE" ]] || return 1
-  local svc
-  svc="$(service_name "${APP_IDS[$idx]}")"
-  [[ -n "$(docker_compose ps --status running -q "$svc" 2>/dev/null || true)" ]]
-}
+app_is_running() { app_is_active "$1"; }
+detect_running_apps() { detect_active_apps; }
+running_app_names() { active_app_names; }
 
-detect_running_apps() {
-  detect_apps
-  RUNNING_INDICES=()
-  local i
-  for i in "${!APP_IDS[@]}"; do
-    if app_is_running "$i"; then
-      RUNNING_INDICES+=("$i")
-    fi
-  done
-}
-
-running_app_names() {
-  detect_running_apps
-  local names="" idx
-  for idx in "${RUNNING_INDICES[@]}"; do
-    names+="${APP_IDS[$idx]},"
-  done
-  echo "${names%,}"
-}
-
-show_running_apps() {
-  detect_running_apps
+show_active_apps() {
+  detect_active_apps
   if [[ ${#APP_IDS[@]} -eq 0 ]]; then
     warn "Tidak ada app di ${APPS_DIR}/"
     return 1
   fi
-  if [[ ${#RUNNING_INDICES[@]} -eq 0 ]]; then
-    warn "Tidak ada container yang sedang jalan."
+  if [[ ${#ACTIVE_INDICES[@]} -eq 0 ]]; then
+    warn "Tidak ada container aktif (running/restarting/paused)."
     echo "  Jalankan Run dari menu untuk start app."
     return 1
   fi
 
   echo ""
-  echo -e "${BOLD}App yang sedang jalan:${NC}"
-  local slot idx app_port log_port
-  for slot in "${!RUNNING_INDICES[@]}"; do
-    idx="${RUNNING_INDICES[$slot]}"
+  echo -e "${BOLD}Container aktif:${NC}"
+  local slot idx app_port log_port cstatus cstatus_label
+  for slot in "${!ACTIVE_INDICES[@]}"; do
+    idx="${ACTIVE_INDICES[$slot]}"
     get_effective_ports "$idx" app_port log_port
     local port_info="app :${app_port}  viewer :${log_port}"
     [[ "$app_port" == "0" ]] && port_info="(no HTTP)  viewer :${log_port}"
-    echo "  [$((slot + 1))] ${APP_IDS[$idx]}"
+    cstatus="$(container_status_for_app "$idx")"
+    cstatus_label="$(format_state_label "$cstatus")"
+    echo -e "  [$((slot + 1))] ${APP_IDS[$idx]} — ${cstatus_label}"
     echo "       port   : ${port_info}"
   done
   echo ""
   return 0
 }
 
-select_running_apps_interactive() {
-  local action="${1:-}"
-  show_running_apps || return 1
+show_running_apps() { show_active_apps; }
 
-  if [[ ${#RUNNING_INDICES[@]} -eq 1 ]]; then
-    SELECTED_INDICES=("${RUNNING_INDICES[0]}")
-    info "Satu app jalan — otomatis: ${APP_IDS[${RUNNING_INDICES[0]}]}"
+select_active_apps_interactive() {
+  local action="${1:-}"
+  show_active_apps || return 1
+
+  if [[ ${#ACTIVE_INDICES[@]} -eq 1 ]]; then
+    SELECTED_INDICES=("${ACTIVE_INDICES[0]}")
+    info "Satu container aktif — otomatis: ${APP_IDS[${ACTIVE_INDICES[0]}]}"
     return 0
   fi
 
@@ -369,7 +485,7 @@ select_running_apps_interactive() {
 
   SELECTED_INDICES=()
   if [[ "$input" == "all" || "$input" == "*" ]]; then
-    SELECTED_INDICES=("${RUNNING_INDICES[@]}")
+    SELECTED_INDICES=("${ACTIVE_INDICES[@]}")
     return 0
   fi
 
@@ -377,12 +493,12 @@ select_running_apps_interactive() {
   IFS=',' read -ra parts <<<"$input"
   for part in "${parts[@]}"; do
     part="$(echo "$part" | xargs)"
-    if ! [[ "$part" =~ ^[0-9]+$ ]] || (( part < 1 || part > ${#RUNNING_INDICES[@]} )); then
-      err "Nomor tidak valid: ${part} (hanya app yang jalan ditampilkan)"
+    if ! [[ "$part" =~ ^[0-9]+$ ]] || (( part < 1 || part > ${#ACTIVE_INDICES[@]} )); then
+      err "Nomor tidak valid: ${part} (hanya container aktif ditampilkan)"
       return 1
     fi
     slot=$((part - 1))
-    SELECTED_INDICES+=("${RUNNING_INDICES[$slot]}")
+    SELECTED_INDICES+=("${ACTIVE_INDICES[$slot]}")
   done
 
   if [[ ${#SELECTED_INDICES[@]} -eq 0 ]]; then
@@ -393,6 +509,8 @@ select_running_apps_interactive() {
   dedupe_indices
   return 0
 }
+
+select_running_apps_interactive() { select_active_apps_interactive "$@"; }
 
 select_apps_interactive() {
   local action="${1:-}"
@@ -457,10 +575,12 @@ confirm_selection() {
 
   echo ""
   echo -e "${BOLD}Konfirmasi ${action}:${NC}"
-  local idx app_port log_port
+  local idx app_port log_port cstatus cstatus_label
   for idx in "${SELECTED_INDICES[@]}"; do
     get_effective_ports "$idx" app_port log_port
-    echo "  • ${APP_IDS[$idx]}"
+    cstatus="$(container_status_for_app "$idx")"
+    cstatus_label="$(format_state_label "$cstatus")"
+    echo -e "  • ${APP_IDS[$idx]} — ${cstatus_label}"
     if [[ "$app_port" == "0" ]]; then
       echo "    viewer : http://localhost:${log_port}/logs"
     else
@@ -515,9 +635,29 @@ EOF
   ok "Dibuat: ${ENV_FILE}"
 }
 
+get_effective_restart_policy() {
+  local idx="$1"
+  local env_f="${APP_ENV_FILES[$idx]:-}"
+  local policy
+  policy="$(read_env_value "$ENV_FILE" APP_RESTART_POLICY "on-failure")"
+  if [[ -n "$env_f" && -f "$env_f" ]] && grep -q '^APP_RESTART_POLICY=' "$env_f" 2>/dev/null; then
+    policy="$(read_env_value "$env_f" APP_RESTART_POLICY "$policy")"
+  fi
+  echo "$policy"
+}
+
+docker_restart_for_policy() {
+  local policy="$1"
+  case "$policy" in
+    never)  echo "no" ;;
+    always) echo "always" ;;
+    *)      echo "unless-stopped" ;;
+  esac
+}
+
 write_compose_multi() {
   local idx app_id app_dir binary env_f svc vol_binary vol_logs
-  local app_port log_port rel_env
+  local app_port log_port rel_env docker_restart restart_policy
 
   {
     echo "# Generated by launcher.sh — do not edit manual (gunakan ./launcher.sh → Setup)"
@@ -532,6 +672,8 @@ write_compose_multi() {
     svc="$(service_name "$app_id")"
 
     get_effective_ports "$idx" app_port log_port
+    restart_policy="$(get_effective_restart_policy "$idx")"
+    docker_restart="$(docker_restart_for_policy "$restart_policy")"
     mkdir_safe "${LOGS_DIR}/${app_id}"
 
     if [[ "${app_dir}/${binary}" == "${ROOT_DIR}/"* ]]; then
@@ -539,6 +681,7 @@ write_compose_multi() {
     else
       vol_binary="${app_dir}/${binary}"
     fi
+    vol_binary="$(normalize_relpath "$vol_binary")"
     vol_logs="./logs/${app_id}"
 
     {
@@ -549,7 +692,7 @@ write_compose_multi() {
       echo "        VERSION: \${VERSION:-0.1.0-dev}"
       echo "    image: ${IMAGE_NAME}"
       echo "    container_name: ${svc}"
-      echo "    restart: unless-stopped"
+      echo "    restart: ${docker_restart}"
       echo "    env_file:"
       echo "      - .env"
       if [[ -n "$env_f" && -f "$env_f" ]]; then
@@ -558,6 +701,7 @@ write_compose_multi() {
         else
           rel_env="$env_f"
         fi
+        rel_env="$(normalize_relpath "$rel_env")"
         echo "      - ${rel_env}"
       fi
       echo "    environment:"
@@ -629,6 +773,21 @@ ensure_global_env() {
   first_run_wizard
 }
 
+validate_global_env() {
+  [[ -f "$ENV_FILE" ]] || return 0
+  local user pass viewer
+  user="$(read_env_value "$ENV_FILE" LOG_USERNAME "")"
+  pass="$(read_env_value "$ENV_FILE" LOG_PASSWORD "")"
+  viewer="$(read_env_value "$ENV_FILE" VIEWER_ENABLED "true")"
+  viewer="$(echo "$viewer" | tr '[:upper:]' '[:lower:]')"
+  if [[ "$viewer" == "true" && ( -z "$user" || -z "$pass" ) ]]; then
+    err "LOG_USERNAME / LOG_PASSWORD wajib di ${ENV_FILE} (VIEWER_ENABLED=true)"
+    err "Jalankan Setup (menu 7) atau perbaiki file — password harus satu baris: LOG_PASSWORD=secret"
+    return 1
+  fi
+  return 0
+}
+
 ensure_compose_all() {
   detect_apps
   if [[ ${#APP_IDS[@]} -eq 0 ]]; then
@@ -650,6 +809,7 @@ ensure_compose_all() {
 
 prepare_deploy() {
   ensure_global_env
+  if ! validate_global_env; then return 1; fi
 
   if ! select_apps_interactive "run"; then
     return 1
@@ -680,7 +840,10 @@ cmd_run() {
   indices_to_services services
 
   info "Menjalankan ${#SELECTED_INDICES[@]} container di background..."
-  docker_compose up -d "${services[@]}"
+  docker_compose up -d --remove-orphans "${services[@]}" || {
+    err "Gagal start container — cek port bentrok (docker compose ps -a)"
+    return 1
+  }
 
   echo ""
   ok "Container berjalan di background."
@@ -705,13 +868,23 @@ cmd_stop() {
   fi
 
   if [[ "${STOP_ALL:-0}" == "1" ]]; then
-    info "Menghentikan semua container..."
-    docker_compose down
-    ok "Semua container dihentikan."
+    detect_active_apps
+    if [[ ${#ACTIVE_INDICES[@]} -eq 0 ]]; then
+      info "Tidak ada container aktif."
+      docker_compose down --remove-orphans 2>/dev/null || true
+      ok "Selesai."
+      return 0
+    fi
+    local services=()
+    SELECTED_INDICES=("${ACTIVE_INDICES[@]}")
+    indices_to_services services
+    info "Menghentikan container aktif: $(active_app_names)"
+    docker_compose stop "${services[@]}"
+    ok "Container dihentikan."
     return 0
   fi
 
-  if ! select_running_apps_interactive "stop"; then return 1; fi
+  if ! select_active_apps_interactive "stop"; then return 1; fi
   if ! confirm_selection "stop"; then return 1; fi
 
   local services=()
@@ -727,7 +900,7 @@ cmd_restart() {
     return 1
   fi
 
-  if ! select_running_apps_interactive "restart"; then return 1; fi
+  if ! select_active_apps_interactive "restart"; then return 1; fi
   if ! confirm_selection "restart"; then return 1; fi
 
   local services=()
@@ -740,20 +913,32 @@ cmd_restart() {
 cmd_status() {
   if [[ ! -f "$COMPOSE_FILE" ]]; then
     warn "Belum ada deployment."
+    detect_apps
+    [[ ${#APP_IDS[@]} -gt 0 ]] && show_detected_apps || true
     return 0
   fi
-  local running
-  running="$(running_app_names)"
+
+  detect_apps
   echo ""
-  echo -e "${BOLD}Status:${NC}"
-  if [[ -n "$running" ]]; then
-    echo "  Running  : ${running}"
-  else
-    echo "  Running  : (tidak ada)"
-  fi
+  echo -e "${BOLD}Status container:${NC}"
+  local i cstatus cstatus_label app_port log_port
+  for i in "${!APP_IDS[@]}"; do
+    cstatus="$(container_status_for_app "$i")"
+    cstatus_label="$(format_state_label "$cstatus")"
+    get_effective_ports "$i" app_port log_port
+    echo -e "  ${APP_IDS[$i]} — ${cstatus_label}"
+    if [[ "$cstatus" == "running" || "$cstatus" == "restarting" || "$cstatus" == "paused" ]]; then
+      if [[ "$app_port" != "0" ]]; then
+        echo "       app    : http://localhost:${app_port}"
+      fi
+      echo "       viewer : http://localhost:${log_port}/logs"
+    fi
+  done
+
   load_state
-  [[ -n "${DEPLOYED_IDS:-}" ]] && echo "  Compose  : ${DEPLOYED_IDS}"
-  docker_compose ps
+  [[ -n "${DEPLOYED_IDS:-}" ]] && echo "" && echo "  Compose  : ${DEPLOYED_IDS}"
+  echo ""
+  docker_compose ps -a
 }
 
 cmd_logs() {
@@ -762,7 +947,7 @@ cmd_logs() {
     return 1
   fi
 
-  if ! select_running_apps_interactive "logs"; then return 1; fi
+  if ! select_active_apps_interactive "logs"; then return 1; fi
 
   local services=()
   indices_to_services services
@@ -791,12 +976,12 @@ show_banner() {
   echo -e "${BOLD}╔══════════════════════════════════════╗${NC}"
   echo -e "${BOLD}║            QoLauncher                ║${NC}"
   echo -e "${BOLD}╚══════════════════════════════════════╝${NC}"
-  local running
-  running="$(running_app_names)"
-  if [[ -n "$running" ]]; then
-    echo -e "  Running: ${GREEN}${running}${NC}"
+  local summary
+  summary="$(active_app_summary)"
+  if [[ -n "$summary" ]]; then
+    echo -e "  Active: ${GREEN}${summary}${NC}"
   else
-    echo -e "  Running: ${YELLOW}(tidak ada)${NC}"
+    echo -e "  Active: ${YELLOW}(tidak ada)${NC}"
   fi
 }
 
@@ -807,7 +992,7 @@ show_menu() {
   echo "  3) Restart  — restart (pilih satu/beberapa/semua)"
   echo "  4) Status   — lihat status container"
   echo "  5) Logs     — tail log container"
-  echo "  6) Apps     — lihat app di folder apps/"
+  echo "  6) Apps     — lihat app di folder apps/ (+ status container)"
   echo "  7) Setup    — buat/ulang .env global"
   echo "  0) Exit"
   echo ""
