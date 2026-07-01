@@ -40,7 +40,8 @@ Repo bawaan berisi demo `apps/http-server/` dan `apps/hello/` (source + `.env`).
 | Menu | Daftar app | Pilihan |
 |------|------------|---------|
 | Run | Semua di `apps/` | `all`, `2`, `1,3` |
-| Stop / Restart / Logs | Hanya yang **sedang running** | `all`, `2`, `1,3` |
+| Stop / Restart / Logs | Hanya container **aktif** (running/restarting/paused) | `all`, `2`, `1,3` |
+| Status / Apps / Banner | Semua app di `apps/` + **status container** (sumber deteksi sama) | — |
 | Status | — | Semua service di compose |
 | Setup | — | Wizard ulang `.env` global |
 
@@ -53,10 +54,21 @@ Tidak di-push: `/.env`, `docker-compose.yml`, `.launcher/`, `logs/`, binary di `
 ### Non-interaktif (Makefile / CI)
 
 ```bash
-make build-examples    # → apps/http-server/server, apps/hello/hello
+make build-examples    # CGO_ENABLED=0 static → apps/http-server/server, apps/hello/hello
 make compose-up        # cp .env.example + ./launcher.sh --run-all
 make compose-down      # ./launcher.sh --stop
 ```
+
+### Build binary app untuk Alpine
+
+Image runtime QoLauncher berbasis **Alpine**. Mount binary dari host **harus** static Linux:
+
+```bash
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o apps/my-api/server .
+file apps/my-api/server   # statically linked
+```
+
+Binary dynamic (glibc) dari `go build` biasa di host → `exec format error` / restart loop; launcher log `application start failed` jika binary tidak bisa dijalankan.
 
 | Flag | Fungsi |
 |------|--------|
@@ -209,7 +221,7 @@ When viewer is disabled, `LOG_USERNAME` and `LOG_PASSWORD` are not required.
 ### Build app + run
 
 ```bash
-GOOS=linux GOARCH=amd64 go build -o apps/my-api/server .
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o apps/my-api/server .
 ./launcher.sh                    # interaktif
 # atau:
 make compose-up                  # demo apps + --run-all
@@ -234,7 +246,7 @@ docker buildx build --platform linux/amd64,linux/arm64 -t qolauncher:latest .
 
 ## CI/CD Pattern
 
-1. Build Go app binary for `linux/$ARCH`.
+1. Build Go app binary for `linux/$ARCH` with **`CGO_ENABLED=0`** (static).
 2. Push binary artifact.
 3. Deploy container with QoLauncher image + binary mount.
 
@@ -244,12 +256,14 @@ No need to rebuild QoLauncher image per app release.
 
 ```
                     ┌─────────────────────────────────────┐
-  User ────────────►│  http-server :8080  viewer :8081    │
-                    │  hello         viewer :8082         │
+  User ────────────►│  http-server :9998  viewer :9999    │
+                    │  hello         viewer :9997         │
                     └─────────────────────────────────────┘
                               logs/http-server/
                               logs/hello/
 ```
+
+Port demo dari `apps/http-server/.env` dan `apps/hello/.env`. Wizard global default `8080`/`8081` jika app tanpa `.env` sendiri.
 
 Production: jangan publish port viewer ke publik; gunakan VPN / internal network.
 

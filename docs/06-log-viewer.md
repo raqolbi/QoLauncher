@@ -46,10 +46,10 @@ Viewer **read-only**; tidak edit/delete via HTTP.
 
 Saat menjalankan beberapa app, **setiap container punya viewer sendiri** — bukan satu portal dengan picker folder.
 
-| App | Host log dir | Viewer URL |
-|-----|--------------|------------|
-| `http-server` | `logs/http-server/` | `http://localhost:8081/logs` |
-| `hello` | `logs/hello/` | `http://localhost:8082/logs` |
+| App | Host log dir | Viewer URL (demo `.env`) |
+|-----|--------------|--------------------------|
+| `http-server` | `logs/http-server/` | `http://localhost:9999/logs` |
+| `hello` | `logs/hello/` | `http://localhost:9997/logs` |
 
 - Homepage `/logs` menampilkan **daftar file log harian** (`YYYY-MM-DD.log`) untuk app container tersebut saja.
 - Ganti app → buka viewer di **port `LOG_PORT`** app tersebut (set di `apps/<id>/.env`).

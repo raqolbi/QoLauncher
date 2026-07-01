@@ -142,7 +142,7 @@ launcher \
 ### Hello World worker (no restart)
 
 ```bash
-GOOS=linux GOARCH=amd64 go build -o ./bin/hello ./apps/hello
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ./bin/hello ./apps/hello
 launcher --binary ./bin/hello --log-dir ./logs/hello --log-username a --log-password b
 ```
 

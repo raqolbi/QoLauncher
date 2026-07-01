@@ -298,6 +298,7 @@ Semua event supervisor ditulis ke **stderr launcher** (structured log), **bukan*
 |-------|-------|--------|
 | `launcher started` | info | version, config summary |
 | `application started` | info | binary, pid, restart_count |
+| `application start failed` | error | binary, error |
 | `application stopped` | info | pid, reason |
 | `application exited` | info | pid, exit_code, signal |
 | `application crashed` | warn | pid, exit_code, signal |

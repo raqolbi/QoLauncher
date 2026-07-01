@@ -401,20 +401,23 @@ Docker Compose menggunakan `env_file: [.env, apps/<id>/.env]` — nilai di file 
 
 **Multi-app:** setiap app **wajib** punya `LOG_PORT` unik; `APP_PORT` unik jika expose HTTP (`0` jika worker tanpa HTTP).
 
-Contoh `apps/http-server/.env`:
+Contoh `apps/http-server/.env` (demo bawaan; `http-server` membaca `APP_PORT`):
 
 ```bash
-APP_PORT=8080
-LOG_PORT=8081
-HEALTHCHECK_URL=http://127.0.0.1:8080/health
+APP_PORT=9998
+LOG_PORT=9999
+HEALTHCHECK_URL=http://127.0.0.1:9998/health
 ```
+
+`HEALTHCHECK_URL` harus mengarah ke port yang **benar-benar** didengarkan aplikasi.
 
 Contoh `apps/hello/.env`:
 
 ```bash
 APP_PORT=0
-LOG_PORT=8082
+LOG_PORT=9997
 HEALTHCHECK_ENABLED=false
+APP_RESTART_POLICY=never
 ```
 
 ---

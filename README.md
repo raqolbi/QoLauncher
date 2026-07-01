@@ -26,8 +26,8 @@ QoLauncher acts as **PID 1** inside the container: it starts your binary, captur
 # Contoh bawaan repo (boleh hapus isi apps/ dan ganti app sendiri)
 make build-examples
 
-# Atau app kamu sendiri:
-GOOS=linux GOARCH=amd64 go build -o apps/my-api/server .
+# Atau app kamu sendiri (wajib static binary untuk image Alpine):
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o apps/my-api/server .
 
 # (Optional) env khusus app — wajib port unik untuk multi-app
 cp .env.example apps/my-api/.env
@@ -58,18 +58,20 @@ make compose-up    # build examples + image + jalankan semua app
 make compose-down
 ```
 
-| App | URL |
-|-----|-----|
-| http-server | http://localhost:8080 |
-| http-server viewer | http://localhost:8081/logs |
-| hello viewer | http://localhost:8082/logs |
+| App | URL (port dari `apps/<id>/.env` bawaan) |
+|-----|----------------------------------------|
+| http-server | http://localhost:9998 |
+| http-server viewer | http://localhost:9999/logs |
+| hello viewer | http://localhost:9997/logs |
+
+> **`docker compose logs`** hanya menampilkan log **launcher** (supervisor). Output app (`fmt.Println`, log HTTP, dll.) ada di **`logs/<app-id>/YYYY-MM-DD.log`** atau log viewer.
 
 ## Run your own binary (manual)
 
 Tanpa `launcher.sh`, build binary untuk Linux lalu mount ke container:
 
 ```bash
-GOOS=linux GOARCH=amd64 go build -o apps/my-api/server .
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o apps/my-api/server .
 ./launcher.sh   # disarankan — auto-generate compose
 
 # atau edit docker-compose.yml manual / docker run:
@@ -94,7 +96,7 @@ make build
 
 ```bash
 make docker-build
-GOOS=linux GOARCH=amd64 go build -o server ./cmd/server
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o server ./cmd/server
 
 docker run -d --name api \
   -v $(pwd)/server:/app/server:ro \
@@ -136,10 +138,10 @@ All settings are environment variables. See [docs/04-configuration.md](docs/04-c
 
 Demo apps live in `apps/` (same layout as production). You can delete them and use your own binaries.
 
-| App | Build | Ports |
-|-----|-------|-------|
-| `http-server` | `make build-examples` | app :8080, viewer :8081 |
-| `hello` | (same) | viewer :8082 |
+| App | Build | Ports (demo `.env`) |
+|-----|-------|---------------------|
+| `http-server` | `make build-examples` | app :9998, viewer :9999 |
+| `hello` | (same) | viewer :9997 (app sekali jalan lalu exit) |
 
 Run all examples:
 

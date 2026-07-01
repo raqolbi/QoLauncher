@@ -51,6 +51,7 @@ func (s *Supervisor) Run(ctx context.Context) int {
 	for {
 		child, err := s.startChild(ctx)
 		if err != nil {
+			s.events.ApplicationStartFailed(s.cfg.AppBinary, err)
 			return 1
 		}
 

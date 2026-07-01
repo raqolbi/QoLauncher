@@ -56,14 +56,16 @@ func main() {
 Build dan deploy:
 
 ```bash
-GOOS=linux GOARCH=amd64 go build -o apps/my-api/server .
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o apps/my-api/server .
 ./launcher.sh   # wizard + menu interaktif (disarankan)
 ```
+
+Binary untuk container Alpine **wajib static** (`CGO_ENABLED=0`). Lihat [08-docker.md](./08-docker.md).
 
 Atau `docker run` langsung:
 
 ```bash
-GOOS=linux GOARCH=amd64 go build -o server .
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o server .
 docker run -d \
   -v $(pwd)/server:/app/server:ro \
   -v $(pwd)/logs/my-api:/var/log/qolauncher \
@@ -88,7 +90,7 @@ func main() {
 }
 ```
 
-Sama flow-nya; `APP_PORT=0` jika aplikasi tidak listen HTTP (hanya log viewer).
+Sama flow-nya; `APP_PORT=0` jika aplikasi tidak listen HTTP (hanya log viewer). Output `fmt.Println` masuk file log harian (`[stdout] Hello World`), bukan `docker compose logs`.
 
 ### Multi-app dengan `launcher.sh`
 
@@ -96,8 +98,8 @@ Taruh setiap binary di `apps/<app-id>/` + optional `apps/<app-id>/.env` (port un
 
 ```
 apps/
-  http-server/server   + .env   → viewer :8081, logs/logs/http-server/
-  hello/hello          + .env   → viewer :8082, logs/logs/hello/
+  http-server/server   + .env   → app :9998, viewer :9999, logs/logs/http-server/
+  hello/hello          + .env   → viewer :9997, logs/logs/hello/
 ```
 
 ```bash

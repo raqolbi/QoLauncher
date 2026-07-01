@@ -32,11 +32,15 @@ First release: Go runtime + interactive deploy wrapper.
 
 - Menu interaktif tetap terbuka saat tidak ada container / aksi dibatalkan
 - Banner menampilkan **Running** (live Docker), bukan label Active dari state file
+- **`make build-examples`** memakai `CGO_ENABLED=0` — binary demo kompatibel dengan image Alpine (hindari restart loop `exec format error`)
+- Demo **`http-server`** membaca `APP_PORT` dari env (selaras dengan healthcheck & compose)
+- Log **`application start failed`** saat binary tidak bisa dijalankan (mis. dynamic glibc di Alpine)
 
 ### Changed
 
 - Example apps in `apps/` (not `examples/`)
 - `docker-compose.yml` generated locally, gitignored
+- Dokumentasi: build static untuk Docker, pemisahan log launcher vs output app, port demo di `apps/*/.env`
 
 ### Security
 

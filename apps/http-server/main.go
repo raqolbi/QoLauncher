@@ -3,9 +3,16 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"os"
 )
 
 func main() {
+	port := os.Getenv("APP_PORT")
+	if port == "" {
+		port = "8080"
+	}
+	addr := ":" + port
+
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = fmt.Fprint(w, "ok")
@@ -15,8 +22,8 @@ func main() {
 		_, _ = fmt.Fprint(w, "QoLauncher example HTTP server\n")
 	})
 
-	fmt.Println("listening on :8080")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
+	fmt.Printf("listening on %s\n", addr)
+	if err := http.ListenAndServe(addr, nil); err != nil {
 		panic(err)
 	}
 }

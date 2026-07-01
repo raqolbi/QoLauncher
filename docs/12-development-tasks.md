@@ -157,7 +157,7 @@ Dokumen tracker implementasi QoLauncher. Gunakan untuk GitHub Issues, Projects, 
 | DOC-01 | Dockerfile multi-stage | P0 | done | SC-01 | Static binary; non-root user; `tzdata` |
 | DOC-02 | `docker-compose.yml` example | P0 | done | DOC-01 | Restart policy, volumes, grace period |
 | DOC-03 | Example app `apps/hello` | P1 | done | SC-01 | Minimal `fmt.Println` binary |
-| DOC-04 | Example app `apps/http-server` | P1 | done | SC-01 | `:8080` + `/health` |
+| DOC-04 | Example app `apps/http-server` | P1 | done | SC-01 | `APP_PORT` env + `/health` |
 | DOC-05 | `.env.example` | P1 | done | CFG-01 | Semua ENV MVP documented |
 
 ---

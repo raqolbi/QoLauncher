@@ -26,21 +26,26 @@ Setiap app **harus punya port unik** di `.env`-nya:
 | `APP_PORT` | Port aplikasi (`0` jika tidak expose HTTP) |
 | `LOG_PORT` | Port log viewer (harus unik per app) |
 
-Contoh bawaan:
+Contoh bawaan (lihat `apps/*/.env`):
 
 | App | APP | Viewer |
 |-----|-----|--------|
-| `http-server` | :8080 | :8081 |
-| `hello` | — | :8082 |
+| `http-server` | :9998 | :9999 |
+| `hello` | — (tidak HTTP) | :9997 |
 
 ## Build binary untuk Docker
 
+Image QoLauncher memakai **Alpine (musl)**. Binary harus **static** (`CGO_ENABLED=0`), bukan dynamic glibc dari host — kalau tidak, container restart loop dan log cuma `launcher started` tanpa `application started`.
+
 ```bash
-# App kamu sendiri
-GOOS=linux GOARCH=amd64 go build -o apps/my-api/server .
+# App kamu sendiri (static binary untuk image Alpine)
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o apps/my-api/server .
 
 # Contoh bawaan repo
 make build-examples
+
+# Verifikasi
+file apps/my-api/server   # harus: statically linked
 ```
 
 ## Menjalankan
@@ -61,9 +66,18 @@ Setiap app punya **viewer terpisah** (port berbeda), bukan satu halaman dengan p
 
 | App | Viewer | Isi homepage `/logs` |
 |-----|--------|----------------------|
-| `http-server` | http://localhost:8081/logs | Daftar file log harian app ini |
-| `hello` | http://localhost:8082/logs | Daftar file log harian app ini |
+| `http-server` | http://localhost:9999/logs | Daftar file log harian app ini |
+| `hello` | http://localhost:9997/logs | Daftar file log harian app ini |
 
-File log di host: `logs/<app-id>/` (mis. `logs/http-server/2026-07-01.log`).
+File log di host: `logs/<app-id>/` (mis. `logs/hello/2026-07-01.log`).
 
-Untuk ganti app → buka viewer di port app tersebut. Homepage viewer menampilkan **file log per tanggal**, bukan picker folder multi-app.
+### Output app vs log launcher
+
+| Sumber | Contoh | Di mana |
+|--------|--------|---------|
+| **Launcher** (supervisor) | `launcher started`, `application exited` | `docker compose logs` |
+| **Aplikasi** (stdout/stderr) | `Hello from QoLauncher`, `listening on :9998` | `logs/<app-id>/YYYY-MM-DD.log` dan log viewer |
+
+Format baris app: `{timestamp} [stdout] {message}` — lihat [docs/05-logging.md](../docs/05-logging.md).
+
+Untuk ganti app → buka viewer di port `LOG_PORT` app tersebut. Homepage viewer menampilkan **file log per tanggal**, bukan picker folder multi-app.

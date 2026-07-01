@@ -24,6 +24,13 @@ func (s *Supervisor) ApplicationStarted(binary string, pid, restartCount int) {
 	})
 }
 
+func (s *Supervisor) ApplicationStartFailed(binary string, err error) {
+	s.log.Error("application start failed", map[string]any{
+		"binary": binary,
+		"error":  err.Error(),
+	})
+}
+
 func (s *Supervisor) ApplicationStopped(pid int, reason string) {
 	s.log.Info("application stopped", map[string]any{"pid": pid, "reason": reason})
 }

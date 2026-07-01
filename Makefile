@@ -28,9 +28,9 @@ docker-build: ## Build Docker image (requires Docker)
 		--build-arg BUILDDATE=$(BUILDDATE) \
 		-t qolauncher:$(VERSION) -t qolauncher:latest .
 
-build-examples: ## Build example app binaries into apps/ (Linux, for Docker)
-	GOOS=linux GOARCH=amd64 $(GO) build -o apps/http-server/server ./apps/http-server
-	GOOS=linux GOARCH=amd64 $(GO) build -o apps/hello/hello ./apps/hello
+build-examples: ## Build example app binaries into apps/ (static Linux, for Alpine Docker)
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GO) build -o apps/http-server/server ./apps/http-server
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GO) build -o apps/hello/hello ./apps/hello
 
 compose-up: build-examples docker-build ## Build apps + image, run all via launcher.sh
 	cp -n .env.example .env 2>/dev/null || true

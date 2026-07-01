@@ -26,6 +26,15 @@ Launcher internal logs ──► stderr (container)  (NOT captured)
 
 Launcher **tidak** men-capture log internal sendiri ke file app log (hindari noise & recursion).
 
+### `docker compose logs` vs file log app
+
+| Output | Isi | Channel |
+|--------|-----|---------|
+| `docker compose logs` | Event supervisor: `launcher started`, `application started`, `restart skipped`, dll. | stderr launcher (structured) |
+| `logs/<app-id>/YYYY-MM-DD.log` | stdout/stderr **aplikasi**: `Hello from QoLauncher`, `listening on :9998`, error runtime app | capture pipe → LogWriter |
+
+Contoh `hello` yang langsung exit: di compose logs terlihat `application exited` exit_code=0; teks `Hello from QoLauncher` hanya di file log / viewer (selama container masih up).
+
 ## Penamaan File
 
 Satu file per hari kalender menurut `TZ`:
