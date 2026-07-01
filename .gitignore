@@ -1,0 +1,71 @@
+# ─── Go build output ───────────────────────────────────────────────────────────
+/bin/
+/dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test & coverage
+*.test
+*.out
+coverage.txt
+coverage.html
+
+# Go workspace
+go.work
+go.work.sum
+
+# ─── IDE & editors ─────────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ─── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ─── Environment & secrets ─────────────────────────────────────────────────────
+# Global env di root (wizard / manual) — jangan commit password production
+/.env
+/.env.local
+/.env.*.local
+
+# Template boleh di-commit
+!.env.example
+
+# Override lokal per app (opsional)
+apps/**/.env.local
+apps/.env.local
+
+# ─── QoLauncher generated & runtime ────────────────────────────────────────────
+.launcher/
+docker-compose.yml
+docker-compose.override.yml
+
+# Log files dari volume mount Docker
+/logs/
+*.log
+
+# ─── apps/ — binary hasil build (keep source + demo .env) ──────────────────────
+#
+# Layout subfolder: apps/<id>/<binary>
+apps/**/*
+!apps/**/
+!apps/**/.env
+!apps/**/.env.example
+!apps/**/main.go
+
+# Layout flat: apps/<binary> di root apps/
+apps/*
+!apps/README.md
+!apps/.gitkeep
+!apps/*/
+!apps/.env
+!apps/.env.example
+
+# ─── Docker local ──────────────────────────────────────────────────────────────
+.docker/
