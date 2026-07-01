@@ -59,13 +59,16 @@ prompt_secret() {
   local ans
   if [[ -n "$default" ]]; then
     read -r -s -p "${msg} [****]: " ans
-    echo ""
-    echo "${ans:-$default}"
+    printf '\n' >&2
+    ans="${ans:-$default}"
   else
     read -r -s -p "${msg}: " ans
-    echo ""
-    echo "$ans"
+    printf '\n' >&2
   fi
+  # Jangan biarkan newline ikut ke command substitution / .env
+  ans="${ans//$'\r'/}"
+  ans="${ans//$'\n'/}"
+  echo "$ans"
 }
 
 prompt_yes_no() {
