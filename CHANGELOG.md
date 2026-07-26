@@ -21,7 +21,7 @@ First release: Go runtime + interactive deploy wrapper.
 - **Log viewer** — Basic Auth, list/view/download logs on `LOG_PORT`
 - **Structured launcher logs** to stderr with supervisor lifecycle events
 - **Docker image** — multi-stage Alpine, non-root user
-- **`launcher.sh`** — interactive deploy (Run/Stop/Restart/Status/Logs/Apps/Setup)
+- **`launcher.sh`** — interactive deploy (Run/Stop/Restart/Reload/Status/Logs/Apps/Setup)
 - First-run wizard: `.env` global + generated `docker-compose.yml`
 - **Multi-app**: satu container per app; pilih `all` / satu / beberapa (`1,3`)
 - **`apps/`** demo layout (`http-server`, `hello`) + Makefile targets
@@ -35,6 +35,7 @@ First release: Go runtime + interactive deploy wrapper.
 - **`make build-examples`** memakai `CGO_ENABLED=0` — binary demo kompatibel dengan image Alpine (hindari restart loop `exec format error`)
 - Demo **`http-server`** membaca `APP_PORT` dari env (selaras dengan healthcheck & compose)
 - Log **`application start failed`** saat binary tidak bisa dijalankan (mis. dynamic glibc di Alpine)
+- Menu **Reload** — stop lalu start ulang + regenerate compose (beda dari Restart cepat)
 
 ### Changed
 

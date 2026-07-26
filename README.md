@@ -36,12 +36,15 @@ cp .env.example apps/my-api/.env
 ./launcher.sh
 ```
 
-Menu: **Run** · **Stop** · **Restart** · **Status** · **Logs** · **Apps** · **Setup**
+Menu: **Run** · **Stop** · **Restart** · **Reload** · **Status** · **Logs** · **Apps** · **Setup**
 
 | Menu | Pilihan app |
 |------|-------------|
 | **Run** | Semua app di `apps/` — ketik `all`, satu nomor, atau `1,3` |
-| **Stop / Restart / Logs** | Hanya app yang **sedang jalan** — pilihan sama (`all` / satu / beberapa) |
+| **Stop / Restart / Reload / Logs** | Hanya app yang **sedang jalan** — pilihan sama (`all` / satu / beberapa) |
+
+- **Restart** = `docker compose restart` (cepat, compose/env lama)
+- **Reload** = stop lalu start ulang + regenerate compose (apply `.env` / binary baru)
 
 - **Multi-app:** satu container Docker per app; `docker-compose.yml` di-generate otomatis
 - Pertama kali: wizard buat `.env` global + `docker-compose.yml`

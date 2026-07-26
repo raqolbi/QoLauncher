@@ -40,10 +40,15 @@ Repo bawaan berisi demo `apps/http-server/` dan `apps/hello/` (source + `.env`).
 | Menu | Daftar app | Pilihan |
 |------|------------|---------|
 | Run | Semua di `apps/` | `all`, `2`, `1,3` |
-| Stop / Restart / Logs | Hanya container **aktif** (running/restarting/paused) | `all`, `2`, `1,3` |
+| Stop / Restart / Reload / Logs | Hanya container **aktif** (running/restarting/paused) | `all`, `2`, `1,3` |
 | Status / Apps / Banner | Semua app di `apps/` + **status container** (sumber deteksi sama) | — |
 | Status | — | Semua service di compose |
 | Setup | — | Wizard ulang `.env` global |
+
+| Aksi | Perilaku |
+|------|----------|
+| **Restart** | `docker compose restart` — container yang sama, cepat |
+| **Reload** | Stop → regenerate `docker-compose.yml` → `up -d` — apply `.env` / binary baru |
 
 Banner menu menampilkan **`Running:`** (status live dari Docker), bukan daftar deploy lama. Jika tidak ada container jalan: `Running: (tidak ada)`. Error atau batal di menu → kembali ke menu (tidak exit script).
 

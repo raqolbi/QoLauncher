@@ -166,11 +166,11 @@ Dokumen tracker implementasi QoLauncher. Gunakan untuk GitHub Issues, Projects, 
 
 | ID | Task | Priority | Status | Deps | Acceptance Criteria |
 |----|------|----------|--------|------|---------------------|
-| WRAP-01 | `launcher.sh` interactive menu | P1 | done | DOC-01 | Run/Stop/Restart/Status/Logs/Apps/Setup |
+| WRAP-01 | `launcher.sh` interactive menu | P1 | done | DOC-01 | Run/Stop/Restart/Reload/Status/Logs/Apps/Setup |
 | WRAP-02 | First-run wizard (`.env` + compose) | P1 | done | WRAP-01 | Wizard buat config global |
 | WRAP-03 | Auto-detect apps di `apps/` | P1 | done | WRAP-01 | Subdir + flat mode; skip `*.go` |
 | WRAP-04 | Multi-app compose generation | P1 | done | WRAP-03 | Satu service per app; port validation |
-| WRAP-05 | Pilih app: all / satu / beberapa | P1 | done | WRAP-04 | Run: semua di apps/; Stop/Restart/Logs: hanya running |
+| WRAP-05 | Pilih app: all / satu / beberapa | P1 | done | WRAP-04 | Run: semua di apps/; Stop/Restart/Reload/Logs: hanya running |
 | WRAP-06 | `apps/README.md` + Makefile targets | P2 | done | WRAP-01 | `make compose-up`, `build-examples` → `apps/` |
 | WRAP-07 | Banner `Running:` live + menu no-exit on error | P2 | done | WRAP-01 | UX: docker ps, `|| true` on menu case |
 

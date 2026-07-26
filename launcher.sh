@@ -785,7 +785,7 @@ validate_global_env() {
   viewer="$(echo "$viewer" | tr '[:upper:]' '[:lower:]')"
   if [[ "$viewer" == "true" && ( -z "$user" || -z "$pass" ) ]]; then
     err "LOG_USERNAME / LOG_PASSWORD wajib di ${ENV_FILE} (VIEWER_ENABLED=true)"
-    err "Jalankan Setup (menu 7) atau perbaiki file — password harus satu baris: LOG_PASSWORD=secret"
+    err "Jalankan Setup (menu 8) atau perbaiki file — password harus satu baris: LOG_PASSWORD=secret"
     return 1
   fi
   return 0
@@ -913,6 +913,76 @@ cmd_restart() {
   ok "Container di-restart: $(selected_app_names)"
 }
 
+# Reload = Stop lalu Start (up -d), beda dari Restart (docker restart).
+# Memakai ulang compose terbaru agar perubahan .env / binary ikut ter-apply.
+cmd_reload() {
+  if [[ ! -f "$COMPOSE_FILE" ]]; then
+    err "Jalankan Run dulu atau setup awal."
+    return 1
+  fi
+
+  if ! select_active_apps_interactive "reload"; then return 1; fi
+  if ! confirm_selection "reload"; then return 1; fi
+
+  local services=()
+  indices_to_services services
+  local names
+  names="$(selected_app_names)"
+
+  # Simpan app id sebelum detect_apps ulang (indeks bisa bergeser)
+  local -a reload_ids=()
+  local idx
+  for idx in "${SELECTED_INDICES[@]}"; do
+    reload_ids+=("${APP_IDS[$idx]}")
+  done
+
+  info "Reload (stop → start): ${names}"
+  docker_compose stop "${services[@]}"
+  ok "Dihentikan: ${names}"
+
+  if ! validate_global_env; then return 1; fi
+  if ! ensure_compose_all; then return 1; fi
+  ensure_image
+
+  SELECTED_INDICES=()
+  local id i
+  for id in "${reload_ids[@]}"; do
+    for i in "${!APP_IDS[@]}"; do
+      if [[ "${APP_IDS[$i]}" == "$id" ]]; then
+        SELECTED_INDICES+=("$i")
+        break
+      fi
+    done
+  done
+
+  if [[ ${#SELECTED_INDICES[@]} -eq 0 ]]; then
+    err "App untuk reload tidak ditemukan di apps/ (binary hilang?)"
+    return 1
+  fi
+
+  services=()
+  indices_to_services services
+  info "Menjalankan ulang: $(selected_app_names)"
+  docker_compose up -d --remove-orphans "${services[@]}" || {
+    err "Gagal start container setelah reload"
+    return 1
+  }
+
+  echo ""
+  ok "Reload selesai: $(selected_app_names)"
+  local app_port log_port
+  for idx in "${SELECTED_INDICES[@]}"; do
+    get_effective_ports "$idx" app_port log_port
+    echo "  ${APP_IDS[$idx]}:"
+    echo "    logs   : ${LOGS_DIR}/${APP_IDS[$idx]}/"
+    if [[ "$app_port" != "0" ]]; then
+      echo "    App    : http://localhost:${app_port}"
+    fi
+    echo "    Viewer : http://localhost:${log_port}/logs"
+  done
+  echo ""
+}
+
 cmd_status() {
   if [[ ! -f "$COMPOSE_FILE" ]]; then
     warn "Belum ada deployment."
@@ -992,11 +1062,12 @@ show_menu() {
   echo ""
   echo "  1) Run      — deploy & jalankan (pilih satu/beberapa/semua)"
   echo "  2) Stop     — hentikan (pilih satu/beberapa/semua)"
-  echo "  3) Restart  — restart (pilih satu/beberapa/semua)"
-  echo "  4) Status   — lihat status container"
-  echo "  5) Logs     — tail log container"
-  echo "  6) Apps     — lihat app di folder apps/ (+ status container)"
-  echo "  7) Setup    — buat/ulang .env global"
+  echo "  3) Restart  — docker restart cepat (tanpa regenerate compose)"
+  echo "  4) Reload   — stop lalu start ulang (apply .env/binary baru)"
+  echo "  5) Status   — lihat status container"
+  echo "  6) Logs     — tail log container"
+  echo "  7) Apps     — lihat app di folder apps/ (+ status container)"
+  echo "  8) Setup    — buat/ulang .env global"
   echo "  0) Exit"
   echo ""
 }
@@ -1015,10 +1086,11 @@ main_menu() {
       1) cmd_run ;;
       2) cmd_stop ;;
       3) cmd_restart ;;
-      4) cmd_status ;;
-      5) cmd_logs ;;
-      6) cmd_list_apps ;;
-      7) cmd_configure ;;
+      4) cmd_reload ;;
+      5) cmd_status ;;
+      6) cmd_logs ;;
+      7) cmd_list_apps ;;
+      8) cmd_configure ;;
       0) info "Bye."; exit 0 ;;
       *) err "Pilihan tidak valid" ;;
     esac || true

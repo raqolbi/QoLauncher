@@ -54,7 +54,7 @@ file apps/my-api/server   # harus: statically linked
 ./launcher.sh
 ```
 
-Pilih **Run** / **Stop** / **Restart** / **Logs** → ketik:
+Pilih **Run** / **Stop** / **Restart** / **Reload** / **Logs** → ketik:
 
 - `all` — semua app
 - `2` — satu app
